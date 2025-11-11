@@ -23,17 +23,17 @@ import pdfplumber
 import spacy
 from collections import defaultdict
 from typing import Dict, List, Optional
-import openai
 import os
 import logging
 from dotenv import load_dotenv, find_dotenv
 import ast
-import tkinter as tk
-from tkinter import scrolledtext, messagebox, filedialog
+# tkinter imports moved to GUI class methods (lazy loading)
 from pygments import lex
 from pygments.lexers import PythonLexer
 from pygments.styles import get_style_by_name
 import subprocess
+
+from .llm_client import LLMClient
 
 class PDFLoader:
     """Handles loading and extracting text from PDF files."""
@@ -215,6 +215,7 @@ class OpenAIHandler:
     def __init__(self, model: str = "gpt-4o-2024-11-20"):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.model = model
+        self.llm_client = LLMClient(model=model)
 
     def generate_summary(self, extracted_data: Dict[str, List[str]]) -> Optional[str]:
         """
@@ -243,24 +244,19 @@ class OpenAIHandler:
         Summarize the details in a practical and structured format.
         """
 
-        try:
-            response = openai.ChatCompletion.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": "You are an algorithmic trading expert."},
-                {"role": "user", "content": prompt}
-            ],
+        summary = self.llm_client.simple_prompt(
+            system_message="You are an algorithmic trading expert.",
+            user_message=prompt,
             max_tokens=1000,
             temperature=0.5
         )
-            summary = response.choices[0].message['content'].strip()
+
+        if summary:
             self.logger.info("Summary generated successfully.")
-            return summary
-        except openai.OpenAIError as e:
-            self.logger.error(f"OpenAI API error during summary generation: {e}")
-        except Exception as e:
-            self.logger.error(f"Unexpected error during summary generation: {e}")
-        return None
+        else:
+            self.logger.error("Failed to generate summary.")
+
+        return summary
 
     def generate_qc_code(self, summary: str) -> Optional[str]:
         """
@@ -271,7 +267,7 @@ class OpenAIHandler:
         #risk_management = '\n'.join(extracted_data.get('risk_management', []))
 
         prompt = f"""
-        You are a QuantConnect algorithm developer. Convert the following trading strategy descriptions into a complete, error-free QuantConnect Python algorithm.
+        You are a QuantConnect algorithm developer. Convert the following trading strategy descriptions into a complete, PRODUCTION-READY QuantConnect Python algorithm.
 
         ### Trading Strategy Summary:
         {summary}
@@ -280,17 +276,49 @@ class OpenAIHandler:
         1. **Initialize Method**:
             - Set the start and end dates.
             - Set the initial cash.
-            - Define the universe selection logic as described in trading strategy summary. 
+            - Define the universe selection logic as described in trading strategy summary.
             - Initialize required indicators as described in summary.
         2. **OnData Method**:
-            - Implement buy/sell logic as described in summary. 
+            - Implement buy/sell logic as described in summary.
             - Ensure indicators are updated correctly.
         3. **Risk Management**:
-            - Apply position sizing or stop-loss mechanisms as described in summary. 
-        4. **Ensure Compliance**:
+            - Apply position sizing or stop-loss mechanisms as described in summary.
+
+        ### CRITICAL: Defensive Programming (REQUIRED)
+        4. **Runtime Safety Checks** (MANDATORY - code will fail without these):
+            - ALWAYS check indicator.IsReady before using indicator.Current.Value
+            - ALWAYS initialize variables before using max() or min() operations
+            - ALWAYS add None checks before comparisons with dictionary values
+            - ALWAYS add zero-division checks before division operations
+            - Use max(calculated_value, minimum_threshold) for risk parameters to avoid zero
+
+        5. **Required Safety Patterns**:
+            ```python
+            # Example: Indicator check
+            if not atr.IsReady:
+                continue
+
+            # Example: None check before max/min
+            if indicators["high"] is None:
+                indicators["high"] = bar.High
+            else:
+                indicators["high"] = max(indicators["high"], bar.High)
+
+            # Example: Division safety
+            stopLoss = max(0.1 * atr.Current.Value, 0.01 * price)  # minimum threshold
+            if stopLoss <= 0:
+                continue
+            positionSize = riskAmount / stopLoss
+
+            # Example: None guard before trading
+            if indicators["high"] is None or indicators["low"] is None:
+                continue
+            ```
+
+        6. **Ensure Compliance**:
             - Use only QuantConnect's supported indicators and methods.
-            - The code must be syntactically correct and free of errors.
-        ```
+            - The code must be syntactically correct and free of runtime errors.
+            - Include defensive checks for all edge cases.
 
         ### Generated Code:
         ```
@@ -298,62 +326,59 @@ class OpenAIHandler:
         ```
         """
 
-        try:
-            response = openai.ChatCompletion.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant specialized in generating QuantConnect algorithms in Python."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=1500,
-                temperature=0.3
-            )
-            generated_code = response.choices[0].message['content'].strip()
-            # Process the generated code as needed
+        generated_code = self.llm_client.simple_prompt(
+            system_message="You are a helpful assistant specialized in generating QuantConnect algorithms in Python.",
+            user_message=prompt,
+            max_tokens=1500,
+            temperature=0.3
+        )
+
+        if generated_code:
             self.logger.info("QuantConnect code generated successfully.")
-            return generated_code
-        except openai.OpenAIError as e:
-            self.logger.error(f"OpenAI API error during code generation: {e}")
-        except Exception as e:
-            self.logger.error(f"Unexpected error during code generation: {e}")
-        return None
+        else:
+            self.logger.error("Failed to generate QuantConnect code.")
+
+        return generated_code
         
     def refine_code(self, code: str) -> Optional[str]:
         """
-        Ask the LLM to fix syntax errors in the generated code.
+        Ask the LLM to fix syntax errors and add runtime safety checks in the generated code.
         """
         self.logger.info("Refining generated code using OpenAI.")
         prompt = f"""
-        The following QuantConnect Python code may have syntax or logical errors. Please fix them as required and provide the corrected code.
+        The following QuantConnect Python code has syntax or runtime errors. Fix all issues and add defensive programming patterns.
+
+        ### CRITICAL: Add these safety checks if missing:
+        1. Check indicator.IsReady before using indicator.Current.Value
+        2. Initialize variables before max()/min() operations
+        3. Add None checks before comparisons
+        4. Add zero-division guards
+        5. Use max(value, minimum_threshold) for risk parameters
 
         ```python
         {code}
         ```
+
+        Return ONLY the corrected Python code in a code block, with all safety checks added.
         """
 
-        try:
-            response = openai.ChatCompletion.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are an expert in QuantConnect Python algorithms."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=1500,
-                temperature=0.2,
-                n=1
-            )
-            corrected_code = response['choices'][0]['message']['content'].strip()
+        corrected_code = self.llm_client.simple_prompt(
+            system_message="You are an expert in QuantConnect Python algorithms.",
+            user_message=prompt,
+            max_tokens=1500,
+            temperature=0.2
+        )
+
+        if corrected_code:
             # Extract code block
             code_match = re.search(r'```python(.*?)```', corrected_code, re.DOTALL | re.IGNORECASE)
             if code_match:
                 corrected_code = code_match.group(1).strip()
             self.logger.info("Code refined successfully.")
             return corrected_code
-        except openai.error.OpenAIError as e:
-            self.logger.error(f"OpenAI API error during code refinement: {e}")
-        except Exception as e:
-            self.logger.error(f"Unexpected error during code refinement: {e}")
-        return None
+        else:
+            self.logger.error("Failed to refine code.")
+            return None
 
 class CodeValidator:
     """Validates Python code for syntax correctness."""
@@ -403,6 +428,10 @@ class GUI:
         """
         self.logger.info("Displaying summary and code in GUI.")
         try:
+            # Lazy import tkinter (only when GUI is actually used)
+            import tkinter as tk
+            from tkinter import scrolledtext, messagebox, filedialog
+
             # Create the main Tkinter root
             root = tk.Tk()
             root.title("Article Processor")
@@ -479,14 +508,21 @@ class GUI:
             root.mainloop()
         except Exception as e:
             self.logger.error(f"Failed to display GUI: {e}")
-            messagebox.showerror("GUI Error", f"An error occurred while displaying the GUI: {e}")
+            try:
+                from tkinter import messagebox
+                messagebox.showerror("GUI Error", f"An error occurred while displaying the GUI: {e}")
+            except ImportError:
+                pass  # Silently fail if tkinter not available
 
-    def apply_syntax_highlighting(self, code: str, text_widget: scrolledtext.ScrolledText):
+    def apply_syntax_highlighting(self, code: str, text_widget):
         """
         Apply syntax highlighting to the code using Pygments and insert it into the Text widget.
         """
         self.logger.info("Applying syntax highlighting to code.")
         try:
+            # Lazy import tkinter
+            import tkinter as tk
+
             lexer = PythonLexer()
             style = get_style_by_name('monokai')  # Choose a Pygments style
             token_colors = {
@@ -531,6 +567,10 @@ class GUI:
         """
         self.logger.info("Copying text to clipboard.")
         try:
+            # Lazy import tkinter
+            import tkinter as tk
+            from tkinter import messagebox
+
             root = tk.Tk()
             root.withdraw()
             root.clipboard_clear()
@@ -540,7 +580,11 @@ class GUI:
             messagebox.showinfo("Copied", "Text copied to clipboard.")
         except Exception as e:
             self.logger.error(f"Failed to copy to clipboard: {e}")
-            messagebox.showerror("Copy Error", f"Failed to copy text to clipboard: {e}")
+            try:
+                from tkinter import messagebox
+                messagebox.showerror("Copy Error", f"Failed to copy text to clipboard: {e}")
+            except ImportError:
+                pass  # Silently fail if tkinter not available
 
     def save_code(self, code: str):
         """
@@ -548,6 +592,9 @@ class GUI:
         """
         self.logger.info("Saving code to file.")
         try:
+            # Lazy import tkinter
+            from tkinter import filedialog, messagebox
+
             filetypes = [('Python Files', '*.py'), ('All Files', '*.*')]
             filename = filedialog.asksaveasfilename(
                 title="Save Code", defaultextension=".py", filetypes=filetypes
@@ -558,7 +605,11 @@ class GUI:
                 messagebox.showinfo("Saved", f"Code saved to {filename}.")
         except Exception as e:
             self.logger.error(f"Failed to save code: {e}")
-            messagebox.showerror("Save Error", f"Failed to save code: {e}")
+            try:
+                from tkinter import messagebox
+                messagebox.showerror("Save Error", f"Failed to save code: {e}")
+            except ImportError:
+                pass  # Silently fail if tkinter not available
 
 class ArticleProcessor:
     """Main processor that orchestrates the PDF processing, analysis, and code generation."""
@@ -630,12 +681,11 @@ class ArticleProcessor:
 
         if not qc_code or not self.code_validator.validate_code(qc_code):
             self.logger.error("Failed to generate valid QuantConnect code after multiple attempts.")
-            qc_code = "QuantConnect code could not be generated successfully."
+            qc_code = None
 
-        # Display summary and code in the GUI
-        self.gui.display_summary_and_code(summary, qc_code)
-
-        if qc_code != "QuantConnect code could not be generated successfully.":
-            self.logger.info("QuantConnect code generation and display completed successfully.")
-        else:
-            self.logger.error("Failed to generate and display QuantConnect code.")
+        # Return results instead of displaying GUI
+        self.logger.info("QuantConnect code generation completed successfully.")
+        return {
+            "summary": summary,
+            "code": qc_code
+        }

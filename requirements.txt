@@ -1,0 +1,37 @@
+# QuantCoder Requirements
+# Updated for OpenAI SDK 1.x+ compatibility
+
+# CLI Framework
+Click>=8.0
+
+# PDF Processing
+pdfplumber>=0.11.0
+
+# NLP
+spacy>=3.8.0
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+
+# LLM Integration
+openai>=1.0.0
+
+# Configuration
+python-dotenv>=1.0.0
+
+# Terminal UI
+inquirerpy>=0.3.4
+pygments>=2.19.0
+rich>=13.0.0
+
+# HTTP Requests
+requests>=2.32.0
+
+# Testing
+pytest>=8.0.0
+pytest-cov>=6.0.0
+pytest-mock>=3.14.0
+
+# Type Checking
+mypy>=1.0.0
+
+# Code Quality
+ruff>=0.8.0
