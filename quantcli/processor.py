@@ -23,7 +23,6 @@ import pdfplumber
 import spacy
 from collections import defaultdict
 from typing import Dict, List, Optional
-import openai
 import os
 import logging
 from dotenv import load_dotenv, find_dotenv
@@ -34,6 +33,8 @@ from pygments import lex
 from pygments.lexers import PythonLexer
 from pygments.styles import get_style_by_name
 import subprocess
+
+from .llm_client import LLMClient
 
 class PDFLoader:
     """Handles loading and extracting text from PDF files."""
@@ -215,6 +216,7 @@ class OpenAIHandler:
     def __init__(self, model: str = "gpt-4o-2024-11-20"):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.model = model
+        self.llm_client = LLMClient(model=model)
 
     def generate_summary(self, extracted_data: Dict[str, List[str]]) -> Optional[str]:
         """
@@ -243,24 +245,19 @@ class OpenAIHandler:
         Summarize the details in a practical and structured format.
         """
 
-        try:
-            response = openai.ChatCompletion.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": "You are an algorithmic trading expert."},
-                {"role": "user", "content": prompt}
-            ],
+        summary = self.llm_client.simple_prompt(
+            system_message="You are an algorithmic trading expert.",
+            user_message=prompt,
             max_tokens=1000,
             temperature=0.5
         )
-            summary = response.choices[0].message['content'].strip()
+
+        if summary:
             self.logger.info("Summary generated successfully.")
-            return summary
-        except openai.OpenAIError as e:
-            self.logger.error(f"OpenAI API error during summary generation: {e}")
-        except Exception as e:
-            self.logger.error(f"Unexpected error during summary generation: {e}")
-        return None
+        else:
+            self.logger.error("Failed to generate summary.")
+
+        return summary
 
     def generate_qc_code(self, summary: str) -> Optional[str]:
         """
@@ -298,25 +295,19 @@ class OpenAIHandler:
         ```
         """
 
-        try:
-            response = openai.ChatCompletion.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant specialized in generating QuantConnect algorithms in Python."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=1500,
-                temperature=0.3
-            )
-            generated_code = response.choices[0].message['content'].strip()
-            # Process the generated code as needed
+        generated_code = self.llm_client.simple_prompt(
+            system_message="You are a helpful assistant specialized in generating QuantConnect algorithms in Python.",
+            user_message=prompt,
+            max_tokens=1500,
+            temperature=0.3
+        )
+
+        if generated_code:
             self.logger.info("QuantConnect code generated successfully.")
-            return generated_code
-        except openai.OpenAIError as e:
-            self.logger.error(f"OpenAI API error during code generation: {e}")
-        except Exception as e:
-            self.logger.error(f"Unexpected error during code generation: {e}")
-        return None
+        else:
+            self.logger.error("Failed to generate QuantConnect code.")
+
+        return generated_code
         
     def refine_code(self, code: str) -> Optional[str]:
         """
@@ -331,29 +322,23 @@ class OpenAIHandler:
         ```
         """
 
-        try:
-            response = openai.ChatCompletion.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are an expert in QuantConnect Python algorithms."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=1500,
-                temperature=0.2,
-                n=1
-            )
-            corrected_code = response['choices'][0]['message']['content'].strip()
+        corrected_code = self.llm_client.simple_prompt(
+            system_message="You are an expert in QuantConnect Python algorithms.",
+            user_message=prompt,
+            max_tokens=1500,
+            temperature=0.2
+        )
+
+        if corrected_code:
             # Extract code block
             code_match = re.search(r'```python(.*?)```', corrected_code, re.DOTALL | re.IGNORECASE)
             if code_match:
                 corrected_code = code_match.group(1).strip()
             self.logger.info("Code refined successfully.")
             return corrected_code
-        except openai.error.OpenAIError as e:
-            self.logger.error(f"OpenAI API error during code refinement: {e}")
-        except Exception as e:
-            self.logger.error(f"Unexpected error during code refinement: {e}")
-        return None
+        else:
+            self.logger.error("Failed to refine code.")
+            return None
 
 class CodeValidator:
     """Validates Python code for syntax correctness."""

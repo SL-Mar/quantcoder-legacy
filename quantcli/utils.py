@@ -3,7 +3,7 @@
 import logging
 from dotenv import load_dotenv
 import os
-import openai
+# OpenAI import removed - now handled by llm_client module
 from typing import Optional  # Import Optional
 
 def setup_logging(verbose: bool = False):
@@ -24,17 +24,17 @@ def setup_logging(verbose: bool = False):
 
 def load_api_key():
     """
-    Load the OpenAI API key from the .env file and set it globally.
+    Load the OpenAI API key from the .env file.
+    Note: API key is now managed by LLMClient class, not set globally.
     """
     load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
     logger = logging.getLogger(__name__)
     if not api_key:
-        logger.error("OPENAI_API_KEY not found in the environment variables.")
-        raise EnvironmentError("OPENAI_API_KEY not found in the environment variables.")
+        logger.warning("OPENAI_API_KEY not found in environment variables.")
+        logger.warning("Set OPENAI_API_KEY in .env file or environment.")
     else:
-        openai.api_key = api_key  # Set the API key globally
-        logger.info("OpenAI API key loaded and set globally.")
+        logger.info("OpenAI API key loaded from environment.")
 
 
 def get_pdf_url_via_unpaywall(doi: str, email: str) -> Optional[str]:
