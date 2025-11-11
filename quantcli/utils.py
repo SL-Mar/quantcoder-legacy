@@ -3,8 +3,9 @@
 import logging
 from dotenv import load_dotenv
 import os
-# OpenAI import removed - now handled by llm_client module
-from typing import Optional  # Import Optional
+import requests
+from typing import Optional
+from urllib.parse import urlparse
 
 def setup_logging(verbose: bool = False):
     """
@@ -97,8 +98,8 @@ def download_pdf(article_url: str, save_path: str, doi: Optional[str] = None) ->
         else:
             logger.info("Direct download unsuccessful. Attempting to use Unpaywall.")
             if doi:
-                # Replace 'your.email@example.com' with your actual email
-                unpaywall_email = "your.email@example.com"
+                # Get email from environment variable
+                unpaywall_email = os.getenv("UNPAYWALL_EMAIL", "your.email@example.com")
                 pdf_url = get_pdf_url_via_unpaywall(doi, unpaywall_email)
                 if pdf_url:
                     response = requests.get(pdf_url, headers=headers)
@@ -112,4 +113,38 @@ def download_pdf(article_url: str, save_path: str, doi: Optional[str] = None) ->
             return False
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to download PDF: {e}")
+        return False
+
+
+def validate_url(url: str) -> bool:
+    """
+    Validate if a URL is safe to open in a web browser.
+
+    Args:
+        url (str): The URL to validate.
+
+    Returns:
+        bool: True if URL is valid and safe, False otherwise.
+    """
+    logger = logging.getLogger(__name__)
+    try:
+        if not url or not isinstance(url, str):
+            logger.warning("Invalid URL: empty or not a string")
+            return False
+
+        parsed = urlparse(url)
+
+        # Check if scheme is http or https
+        if parsed.scheme not in ['http', 'https']:
+            logger.warning(f"Invalid URL scheme: {parsed.scheme}")
+            return False
+
+        # Check if netloc (domain) exists
+        if not parsed.netloc:
+            logger.warning("Invalid URL: missing domain")
+            return False
+
+        return True
+    except Exception as e:
+        logger.error(f"Error validating URL: {e}")
         return False

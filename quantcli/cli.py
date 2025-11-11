@@ -5,7 +5,7 @@ import os
 import json
 # Lazy import for GUI to avoid tkinter dependency
 from .processor import ArticleProcessor
-from .utils import setup_logging, load_api_key, download_pdf
+from .utils import setup_logging, load_api_key, download_pdf, validate_url
 from .search import search_crossref, save_to_html
 import logging
 import webbrowser
@@ -115,8 +115,12 @@ def download(article_id):
         click.echo("Failed to download the PDF. You can open the article's webpage instead.")
         open_manual = click.confirm("Would you like to open the article URL in your browser for manual download?", default=True)
         if open_manual:
-            webbrowser.open(article["URL"])
-            click.echo("Opened the article URL in your default web browser.")
+            url = article["URL"]
+            if validate_url(url):
+                webbrowser.open(url)
+                click.echo("Opened the article URL in your default web browser.")
+            else:
+                click.echo(f"Invalid or unsafe URL: {url}")
 
 @cli.command()
 @click.argument('article_id', type=int)
@@ -206,8 +210,12 @@ def open_article(article_id):
         return
     
     article = articles[article_id - 1]
-    webbrowser.open(article["URL"])
-    click.echo(f"Opened article URL: {article['URL']}")
+    url = article["URL"]
+    if validate_url(url):
+        webbrowser.open(url)
+        click.echo(f"Opened article URL: {url}")
+    else:
+        click.echo(f"Invalid or unsafe URL: {url}")
 
 @cli.command()
 def interactive():
