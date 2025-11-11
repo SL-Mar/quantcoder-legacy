@@ -3,12 +3,16 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![OpenAI](https://img.shields.io/badge/OpenAI-1.0+-green.svg)](https://github.com/openai/openai-python)
+# QuantCoder (CLI Version)
 
 > **Transform academic trading research into executable QuantConnect algorithms using AI.**
 
 QuantCoder is a command-line tool that converts research papers into production-ready QuantConnect trading algorithms using natural language processing and large language models. Based on a dual-agent cognitive architecture, it extracts trading signals, risk management rules, and generates tested Python code.
 
 ## ✨ Key Features
+As of November 2025, it is under refactoring with readiness expected in February 2026. 
+
+---
 
 - 📄 **PDF Processing**: Extract trading strategies from academic papers
 - 🔍 **CrossRef Integration**: Search and download financial research articles
