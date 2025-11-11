@@ -1,10 +1,10 @@
 # QuantCoder (Legacy CLI Version)
 
-> ⚠️ This is the original CLI-only version of QuantCoder, preserved in the `quantcoder-legacy` branch.
-
 QuantCoder is a command-line tool that allows users to generate QuantConnect trading algorithms from research articles using natural language processing and large language models (LLMs). It was initiated in November 2023 and based on a cognitive architecture inspired by the article ["Dual Agent Chatbots and Expert Systems Design"](https://towardsdev.com/dual-agent-chatbots-and-expert-systems-design-25e2cba434e9)
 
 The initial version successfully coded a blended momentum and mean-reversion strategy as described in ["Outperforming the Market (1000% in 10 years)"](https://medium.com/coinmonks/how-to-outperform-the-market-fe151b944c77?sk=7066045abe12d5cf88c7edc80ec2679c), which received over 10,000 impressions on LinkedIn.
+
+As of November 2025, it is under refactoring with readiness expected in February 2026. 
 
 ---
 
