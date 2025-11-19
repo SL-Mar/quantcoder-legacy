@@ -3,9 +3,9 @@
 import click
 import os
 import json
-from .gui import launch_gui  
+# Lazy import for GUI to avoid tkinter dependency
 from .processor import ArticleProcessor
-from .utils import setup_logging, load_api_key, download_pdf
+from .utils import setup_logging, load_api_key, download_pdf, validate_url
 from .search import search_crossref, save_to_html
 import logging
 import webbrowser
@@ -115,8 +115,12 @@ def download(article_id):
         click.echo("Failed to download the PDF. You can open the article's webpage instead.")
         open_manual = click.confirm("Would you like to open the article URL in your browser for manual download?", default=True)
         if open_manual:
-            webbrowser.open(article["URL"])
-            click.echo("Opened the article URL in your default web browser.")
+            url = article["URL"]
+            if validate_url(url):
+                webbrowser.open(url)
+                click.echo("Opened the article URL in your default web browser.")
+            else:
+                click.echo(f"Invalid or unsafe URL: {url}")
 
 @cli.command()
 @click.argument('article_id', type=int)
@@ -167,6 +171,10 @@ def generate_code_cmd(article_id):
     processor = ArticleProcessor()
     results = processor.extract_structure_and_generate_code(filepath)
 
+    if not results:
+        click.echo("Failed to extract structure and generate code.")
+        return
+
     summary = results.get("summary")
     code = results.get("code")
 
@@ -202,8 +210,12 @@ def open_article(article_id):
         return
     
     article = articles[article_id - 1]
-    webbrowser.open(article["URL"])
-    click.echo(f"Opened article URL: {article['URL']}")
+    url = article["URL"]
+    if validate_url(url):
+        webbrowser.open(url)
+        click.echo(f"Opened article URL: {url}")
+    else:
+        click.echo(f"Invalid or unsafe URL: {url}")
 
 @cli.command()
 def interactive():
@@ -211,7 +223,13 @@ def interactive():
     Perform an interactive search and process with a GUI.
     """
     click.echo("Starting interactive mode...")
-    launch_gui()  # Call the launch_gui function to run the GUI
+    try:
+        from .gui import launch_gui
+        launch_gui()
+    except ImportError as e:
+        click.echo("⚠️  Interactive mode requires tkinter (GUI library)")
+        click.echo("Install with: sudo apt-get install python3-tk")
+        click.echo("Or use CLI commands: search, list, download, summarize, generate-code")
 
 if __name__ == '__main__':
     cli()

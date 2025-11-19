@@ -7,6 +7,7 @@ import json
 import os
 import logging
 from .processor import ArticleProcessor
+from .utils import validate_url
 import webbrowser
 from pygments import lex
 from pygments.lexers import PythonLexer
@@ -157,7 +158,11 @@ class QuantCLIGUI:
     def open_article_by_id(self, index):
         try:
             article = self.articles[index]
-            webbrowser.open(article["URL"])
+            url = article["URL"]
+            if validate_url(url):
+                webbrowser.open(url)
+            else:
+                messagebox.showerror("Invalid URL", f"The URL is invalid or unsafe: {url}")
         except IndexError:
             messagebox.showwarning("Invalid Index", f"Article at index {index} not found.")
 
